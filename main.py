@@ -138,28 +138,76 @@ Adds a user to the database.
 """
 @client.command(aliases=[CMD_ADD_USER])
 async def add_user(ctx, *args):
-    await ctx.send('Adding user!')
+    if len(args) == 0:
+        return
+    
+    await check_db_exists(ctx, DB_USERS, {})
+
+    users = db[DB_USERS]
+    user = args[0]
+
+    if user in users:
+        await ctx.send('User {0} is already in the database.'.format(user))
+        return
+
+    users[user] = {}
+    db[DB_USERS] = users
+    
+    await ctx.send('Now tracking user {0}.'.format(user))
+
 
 """
 Removes a user from the database.
 """
 @client.command(aliases=[CMD_REM_USER])
 async def remove_user(ctx, *args):
-    await ctx.send('Deleting user!')
+    user = args[0]
+    
+    if not await check_db_exists(ctx, DB_USERS, {}, 'User {0} does not exist in the database.'.format(user)):
+        return
+
+    users = db[DB_USERS]
+
+    if user in users.keys():
+        users.pop(user, None)
+        await ctx.send('Successully removed user {0} from the database.'.format(user))
+    else:
+        await ctx.send('User {0} does not exist in the database.'.format(user))        
 
 """
 Gets a user from the database.
 """
 @client.command(aliases=[CMD_GET_USERS])
 async def get_users(ctx):
-    await ctx.send('Getting users!')
+    await check_db_exists(ctx, DB_USERS, {})
+
+    users = list(db[DB_USERS].keys())
+    length = len(users)
+
+    if length == 0:
+        await ctx.send('There are currently no users in the database.')
+    elif length == 1:
+        await ctx.send('The only user in the database is: {0}.'.format(users[0]))
+    else:
+        s = ''
+        for i in range(0, len(users)):
+            s += users[i]
+            
+            if i == length - 2:
+                s += ', and '
+            elif i != length - 1:
+                s += ', '
+
+        await ctx.send('The users currently in the database are: {0}.'.format(s))
 
 """
 Removes all users from the database.
 """
 @client.command(aliases=[CMD_PURGE_USERS])
 async def purge_users(ctx):
-    await ctx.send('Purging users!')
+    db[DB_USERS] = {}
+
+    await ctx.send('Purged all users from the database.')
 
 ### ### ###
 
