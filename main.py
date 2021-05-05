@@ -26,6 +26,9 @@ CMD_PURGE_USERS = ['purgeusers', 'pu']
 DB_WORDS = 'WORDS'
 DB_USERS = 'USERS'
 
+# If i'm debugging the bot
+debug = True
+
 # Load .env
 load_dotenv(os.path.join('venv/', '.env'))
 
@@ -41,6 +44,15 @@ db = replit.Database(os.getenv('DB_URL'))
 try_purge_words, try_purge_users = False, False
 
 ### Helpers
+
+"""
+Debug print function.
+"""
+def print_debug(s):
+    global debug
+
+    if debug:
+        print('DEBUG: ' + s)
 
 """
 Checks if the database exists. If it doesn't, create it.
@@ -72,14 +84,14 @@ async def add_word(ctx, *args):
     await check_db_exists(ctx, DB_WORDS, [word])
     
     words = db[DB_WORDS]
-    
+
     # Construct regex
     word_as_chars = [char for char in word]
     regex = '.'.join(word_as_chars) + '|' + '*'.join(word_as_chars)
-
-    for word in words:
-        if re.match(regex, word):
-            await ctx.send('{0} is already in the database.'.format(word))
+    
+    for w in words:
+        if re.match(regex, w):
+            await ctx.send('{0} is already in the database.'.format(w))
             return
     
     words.append(word)
@@ -316,5 +328,7 @@ async def on_message(ctx):
     else:
         await check_message(ctx)
 
-keep_running()
+if not debug:
+    keep_running()
+
 client.run(os.getenv('BOT_TOKEN'))
