@@ -212,6 +212,35 @@ async def purge_users(ctx):
 ### ### ###
 
 """
+Called when a user sends a discord message. Check if the message author
+is being tracked. If they are, check if the message contains any words
+that are being tracked. If there is a word, update the number of times
+the user has said that word.
+"""
+async def check_message(ctx):
+    words_msg = ctx.content.split()
+    
+    author = str(ctx.author)
+    users = db[DB_USERS]
+
+    if author not in users:
+        return
+
+    words = db[DB_WORDS]
+
+    for word in words_msg:
+        if word in words:
+            user = users[author]
+
+            if word in user.keys():
+                user[word] += 1
+            else:
+                user[word] = 1
+
+            output_msg = '{0} has said {1} {2} times.'.format(ctx.author.mention, word, user[word])
+            await ctx.channel.send(output_msg)
+
+"""
 Called when bot has finished starting up.
 """
 @client.event
@@ -227,6 +256,9 @@ async def on_message(ctx):
     if ctx.author == client.user:
         return
 
-    await client.process_commands(ctx)
+    if ctx.content[0] == CMD_IDENTIFIER:
+        await client.process_commands(ctx)
+    else:
+        await check_message(ctx)
 
 client.run(os.getenv('BOT_TOKEN'))
