@@ -6,6 +6,8 @@ import re
 from discord.ext import commands
 from dotenv import load_dotenv
 
+from ping import keep_running
+
 # Constants
 CMD_IDENTIFIER = '$'
 
@@ -314,4 +316,5 @@ async def on_message(ctx):
     else:
         await check_message(ctx)
 
+keep_running()
 client.run(os.getenv('BOT_TOKEN'))
