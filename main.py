@@ -9,24 +9,34 @@ from dotenv import load_dotenv
 # Constants
 CMD_IDENTIFIER = '$'
 
-CMD_ADD_WORD = 'aw'
-CMD_REM_WORD = 'rw'
+CMD_ADD_WORD = ['addword', 'aw']
+CMD_REM_WORD = ['removeword' 'rw']
 
-CMD_ADD_USER = 'au'
-CMD_REM_USER = 'ru'
+CMD_ADD_USER = ['adduser', 'au']
+CMD_REM_USER = ['removeuser', 'ru']
 
-CMD_GET_WORDS = 'gw'
-CMD_GET_USERS = 'gu'
+CMD_GET_WORDS = ['getwords', 'gw']
+CMD_GET_USERS = ['getusers', 'gu']
 
-CMD_PURGE_WORDS = 'pw'
-CMD_PURGE_USERS = 'pu'
+CMD_PURGE_WORDS = ['purgewords', 'pw']
+CMD_PURGE_USERS = ['purgeusers', 'pu']
 
 DB_WORDS = 'WORDS'
 DB_USERS = 'USERS'
 
+# Load .env
 load_dotenv(os.path.join('venv/', '.env'))
-client = commands.Bot(command_prefix=CMD_IDENTIFIER)
+
+# Create client
+intents = discord.Intents.default()
+intents.members = True
+client = commands.Bot(command_prefix=CMD_IDENTIFIER, intents=intents)
+
+# Get database
 db = replit.Database(os.getenv('DB_URL'))
+
+# Purge stuff
+try_purge_words, try_purge_users = False, False
 
 ### Helpers
 
@@ -44,38 +54,42 @@ async def check_db_exists(ctx, name, init, msg=None):
         
         return False
     return True
-    
 
 ### Word commands
 
 """
 Adds a word to the database.
 """
-@client.command(name='AddWord', aliases=[CMD_ADD_WORD])
+@client.command(name='AddWord', aliases=CMD_ADD_WORD)
 async def add_word(ctx, *args):
     if len(args) == 0:
         return
-    
-    word = args[0].lower().replace(' ', '')
+
+    word = ''.join(args).lower().replace(' ', '')
 
     await check_db_exists(ctx, DB_WORDS, [word])
     
-    word = args[0].lower()
     words = db[DB_WORDS]
     
-    if word in words:
-        await ctx.send('{0} is already in the database.'.format(word))
-        return
+    # Construct regex
+    word_as_chars = [char for char in word]
+    regex = '.'.join(word_as_chars) + '|' + '*'.join(word_as_chars)
+
+    for word in words:
+        if re.match(regex, word):
+            await ctx.send('{0} is already in the database.'.format(word))
+            return
     
     words.append(word)
 
     db[DB_WORDS] = words
     await ctx.send('{0} successfuly added to the database.'.format(word))
 
+
 """
 Removes a word from the database.
 """
-@client.command(aliases=[CMD_REM_WORD])
+@client.command(name='RemoveWord', aliases=CMD_REM_WORD)
 async def remove_word(ctx, *args):
     if len(args) == 0:
         return
@@ -93,11 +107,12 @@ async def remove_word(ctx, *args):
     except ValueError:
         await ctx.send('{0} does not exist in the database.'.format(word))
 
+
 """
 Gets a list of all words in the database and sends
 it as a discord message.
 """
-@client.command(aliases=[CMD_GET_WORDS])
+@client.command(name='GetWords', aliases=CMD_GET_WORDS)
 async def get_words(ctx):
     await check_db_exists(ctx, DB_WORDS, [])
 
@@ -126,10 +141,20 @@ async def get_words(ctx):
 """
 Removes all words from the database.
 """
-@client.command(aliases=[CMD_PURGE_WORDS])
+@client.command(name='PurgeWords', aliases=CMD_PURGE_WORDS)
 async def purge_words(ctx):
+    global try_purge_words
+
+    if not try_purge_words:
+        try_purge_words = True
+        await ctx.send('Do you really want to purge all words from the database? Use the command again if you really want to.')
+        
+        return
+
     db[DB_WORDS] = []
     
+    try_purge_words = False
+
     await ctx.send('Purged all words from the database.')
 
 ### User commands
@@ -137,7 +162,7 @@ async def purge_words(ctx):
 """
 Adds a user to the database.
 """
-@client.command(aliases=[CMD_ADD_USER])
+@client.command(name='AddUser', aliases=CMD_ADD_USER)
 async def add_user(ctx, *args):
     if len(args) == 0:
         return
@@ -146,6 +171,12 @@ async def add_user(ctx, *args):
 
     users = db[DB_USERS]
     user = args[0]
+
+    members = [member.name + '#' + member.discriminator for member in client.get_all_members()]
+
+    if user not in members:
+        await ctx.send('Could not find member with that username.')
+        return
 
     if user in users:
         await ctx.send('User {0} is already in the database.'.format(user))
@@ -160,7 +191,7 @@ async def add_user(ctx, *args):
 """
 Removes a user from the database.
 """
-@client.command(aliases=[CMD_REM_USER])
+@client.command(name='RemoveUser', aliases=CMD_REM_USER)
 async def remove_user(ctx, *args):
     user = args[0]
     
@@ -175,10 +206,11 @@ async def remove_user(ctx, *args):
     else:
         await ctx.send('User {0} does not exist in the database.'.format(user))        
 
+
 """
 Gets a user from the database.
 """
-@client.command(aliases=[CMD_GET_USERS])
+@client.command(name='GetUsers', aliases=CMD_GET_USERS)
 async def get_users(ctx):
     await check_db_exists(ctx, DB_USERS, {})
 
@@ -201,12 +233,23 @@ async def get_users(ctx):
 
         await ctx.send('The users currently in the database are: {0}.'.format(s))
 
+
 """
 Removes all users from the database.
 """
-@client.command(aliases=[CMD_PURGE_USERS])
+@client.command(name='PurgeUsers', aliases=CMD_PURGE_USERS)
 async def purge_users(ctx):
+    global try_purge_users
+
+    if not try_purge_users:
+        try_purge_users = True
+        await ctx.send('Do you really want to purge all users from the database? Type the command again if you really want to.')
+        
+        return
+
     db[DB_USERS] = {}
+
+    try_purge_users = False
 
     await ctx.send('Purged all users from the database.')
 
@@ -234,9 +277,7 @@ async def check_message(ctx):
         
         # Construct regex
         word_as_chars = [char for char in word]
-        regex = '.'.join(word_as_chars)
-        regex += '|'
-        regex += '*'.join(word_as_chars)
+        regex = '.'.join(word_as_chars) + '|' + '*'.join(word_as_chars)
 
         for word in words:
             if re.match(regex, word):
@@ -250,12 +291,14 @@ async def check_message(ctx):
                 output_msg = '{0} has said {1} {2} times.'.format(ctx.author.mention, word, user[word])
                 await ctx.channel.send(output_msg)
 
+
 """
 Called when bot has finished starting up.
 """
 @client.event
 async def on_ready():
     print('Bot running')
+
 
 """
 Called when their is a message is sent in discord
