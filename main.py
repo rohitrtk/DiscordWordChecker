@@ -1,6 +1,7 @@
 import discord
 import replit
 import os
+import re
 
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -55,7 +56,7 @@ async def add_word(ctx, *args):
     if len(args) == 0:
         return
     
-    word = args[0]
+    word = args[0].lower().replace(' ', '')
 
     await check_db_exists(ctx, DB_WORDS, [word])
     
@@ -79,7 +80,7 @@ async def remove_word(ctx, *args):
     if len(args) == 0:
         return
 
-    word = args[0]
+    word = args[0].lower().replace(' ', '')
 
     if not await check_db_exists(ctx, DB_WORDS, [], '{0} does not exist in the database'.format(word)):
         return
@@ -219,7 +220,6 @@ the user has said that word.
 """
 async def check_message(ctx):
     words_msg = ctx.content.split()
-    
     author = str(ctx.author)
     users = db[DB_USERS]
 
@@ -229,16 +229,26 @@ async def check_message(ctx):
     words = db[DB_WORDS]
 
     for word in words_msg:
-        if word in words:
-            user = users[author]
+        # Remove whitespace and convert string to lower case
+        word = word.replace(' ', '').lower()
+        
+        # Construct regex
+        word_as_chars = [char for char in word]
+        regex = '.'.join(word_as_chars)
+        regex += '|'
+        regex += '*'.join(word_as_chars)
 
-            if word in user.keys():
-                user[word] += 1
-            else:
-                user[word] = 1
+        for word in words:
+            if re.match(regex, word):
+                user = users[author]
 
-            output_msg = '{0} has said {1} {2} times.'.format(ctx.author.mention, word, user[word])
-            await ctx.channel.send(output_msg)
+                if word in user.keys():
+                    user[word] += 1
+                else:
+                    user[word] = 1
+
+                output_msg = '{0} has said {1} {2} times.'.format(ctx.author.mention, word, user[word])
+                await ctx.channel.send(output_msg)
 
 """
 Called when bot has finished starting up.
