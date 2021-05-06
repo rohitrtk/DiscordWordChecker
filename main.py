@@ -23,8 +23,7 @@ CMD_GET_USERS = ['getusers', 'gu']
 CMD_PURGE_WORDS = ['purgewords', 'pw']
 CMD_PURGE_USERS = ['purgeusers', 'pu']
 
-DB_WORDS = 'WORDS'
-DB_USERS = 'USERS'
+DB_NAME = 'USERS'
 
 # If i'm debugging the bot
 debug = True
@@ -37,100 +36,119 @@ intents = discord.Intents.default()
 intents.members = True
 client = commands.Bot(command_prefix=CMD_IDENTIFIER, intents=intents)
 
-# Get database
+# Database setup
 db = replit.Database(os.getenv('DB_URL'))
+if DB_NAME not in db.keys():
+    db[DB_NAME] = {}
+
+database = db[DB_NAME]
 
 # Purge stuff
 try_purge_words, try_purge_users = False, False
 
 ### Helpers
 
-"""
-Debug print function.
-"""
 def print_debug(s):
+    """
+    Debug print function.
+    """
     global debug
 
     if debug:
         print('DEBUG: ' + s)
 
-"""
-Checks if the database exists. If it doesn't, create it.
-"""
-async def check_db_exists(ctx, name, init, msg=None):
-    if name not in db.keys():
-        db[name] = init
-        
-        if msg == None:
-            return
-        
-        await ctx.send(msg)
-        
-        return False
-    return True
+
+async def is_valid_username(ctx, username):
+    """
+    Return True if the given username exists in the server. Otherwise, return False.
+    """
+    members = [member.name + '#' + member.discriminator for member in client.get_all_members()]
+
+    if username in members:
+        return True
+    return False
+
 
 ### Word commands
 
-"""
-Adds a word to the database.
-"""
 @client.command(name='AddWord', aliases=CMD_ADD_WORD)
 async def add_word(ctx, *args):
-    if len(args) == 0:
+    """
+    Adds a word to a specific users dictionary.
+
+    Input: args[0] is a persons discord username, args[1] is the word to be tracked.
+    """
+    global database
+
+    if len(args) != 2:
+        await ctx.send('Invalid command arguments.')
         return
 
-    word = ''.join(args).lower().replace(' ', '')
+    username = args[0]
+    if not await is_valid_username(ctx, username):
+        await ctx.send('Could not add word. Username is either invalid or does not exist.')
+        return
 
-    await check_db_exists(ctx, DB_WORDS, [word])
+    word = ''.join(args[1]).lower().replace(' ', '')    
     
-    words = db[DB_WORDS]
+    words = database[username]
 
     # Construct regex
     word_as_chars = [char for char in word]
     regex = '.'.join(word_as_chars) + '|' + '*'.join(word_as_chars)
     
-    for w in words:
+    for w in words.keys():
         if re.match(regex, w):
             await ctx.send('{0} is already in the database.'.format(w))
             return
     
-    words.append(word)
+    words[word] = 0
 
-    db[DB_WORDS] = words
+    database = words
     await ctx.send('{0} successfuly added to the database.'.format(word))
 
 
-"""
-Removes a word from the database.
-"""
 @client.command(name='RemoveWord', aliases=CMD_REM_WORD)
 async def remove_word(ctx, *args):
-    if len(args) == 0:
+    """
+    Removes a word from the database.
+
+    Input: args[0] is a persons discord username, args[1] is the word being tracked.
+    """
+    global database
+
+    if len(args) != 2:
+        await ctx.send('Invalid command arguments.')
         return
 
-    word = args[0].lower().replace(' ', '')
+    username = args[0]
 
-    if not await check_db_exists(ctx, DB_WORDS, [], '{0} does not exist in the database'.format(word)):
+    word = args[1].lower().replace(' ', '')
+
+    if username not in database.keys():
+        await ctx.send('{0} is not in the database.'.format(username))
         return
 
-    words = db[DB_WORDS]
+    if word not in database[username].keys():
+        await ctx.send('Not tracking the word {0} for user {1}.'.format(word, username))
+        return
 
-    try:
-        words.remove(word)
-        await ctx.send('Successfully removed {0} from the database.'.format(word))
-    except ValueError:
-        await ctx.send('{0} does not exist in the database.'.format(word))
+    del database[username][word]
+    await ctx.send('Removed {0} from {1}\'s database.'.format(word, username))
 
 
-"""
-Gets a list of all words in the database and sends
-it as a discord message.
-"""
 @client.command(name='GetWords', aliases=CMD_GET_WORDS)
-async def get_words(ctx):
-    await check_db_exists(ctx, DB_WORDS, [])
+async def get_words(ctx, username):
+    """
+    Gets a list of all words in the database and sends
+    it as a discord message.
 
-    words = db[DB_WORDS]
+    Input: args[0] is the username.
+    """
+    global database
+
+    words = list(database[username].keys())
+    print(words)
     length = len(words)
 
     if length == 0:
@@ -173,17 +191,18 @@ async def purge_words(ctx):
 
 ### User commands
 
-"""
-Adds a user to the database.
-"""
 @client.command(name='AddUser', aliases=CMD_ADD_USER)
 async def add_user(ctx, *args):
-    if len(args) == 0:
-        return
-    
-    await check_db_exists(ctx, DB_USERS, {})
+    """
+    Adds a user to the database.
+    """
+    global database
 
-    users = db[DB_USERS]
+    if len(args) == 0:
+        await ctx.send('Invalid command arguments.')
+        return
+
+    users = database.keys()
     user = args[0]
 
     members = [member.name + '#' + member.discriminator for member in client.get_all_members()]
@@ -196,39 +215,43 @@ async def add_user(ctx, *args):
         await ctx.send('User {0} is already in the database.'.format(user))
         return
 
-    users[user] = {}
-    db[DB_USERS] = users
+    database[user] = {}
+    ddatabase = users
     
     await ctx.send('Now tracking user {0}.'.format(user))
 
 
-"""
-Removes a user from the database.
-"""
 @client.command(name='RemoveUser', aliases=CMD_REM_USER)
 async def remove_user(ctx, *args):
-    user = args[0]
-    
-    if not await check_db_exists(ctx, DB_USERS, {}, 'User {0} does not exist in the database.'.format(user)):
+    """
+    Removes a user from the database.
+    """
+    global database
+
+    if len(args) == 0:
+        await ctx.send('Invalid command arguments.')
         return
 
-    users = db[DB_USERS]
+    user = args[0]
 
-    if user in users.keys():
-        users.pop(user, None)
-        await ctx.send('Successully removed user {0} from the database.'.format(user))
-    else:
-        await ctx.send('User {0} does not exist in the database.'.format(user))        
+    users = database.keys()
+
+    if user not in users:
+        await ctx.send('User {0} does not exist in the database.'.format(user))
+        return
+
+    database.pop(user)
+    await ctx.send('Successully removed user {0} from the database.'.format(user))
 
 
-"""
-Gets a user from the database.
-"""
 @client.command(name='GetUsers', aliases=CMD_GET_USERS)
 async def get_users(ctx):
-    await check_db_exists(ctx, DB_USERS, {})
+    """
+    Gets a user from the database.
+    """
+    global database
 
-    users = list(db[DB_USERS].keys())
+    users = list(database.keys())
     length = len(users)
 
     if length == 0:
@@ -248,12 +271,12 @@ async def get_users(ctx):
         await ctx.send('The users currently in the database are: {0}.'.format(s))
 
 
-"""
-Removes all users from the database.
-"""
 @client.command(name='PurgeUsers', aliases=CMD_PURGE_USERS)
 async def purge_users(ctx):
-    global try_purge_users
+    """
+    Removes all users from the database.
+    """
+    global try_purge_users, database
 
     if not try_purge_users:
         try_purge_users = True
@@ -261,33 +284,32 @@ async def purge_users(ctx):
         
         return
 
-    db[DB_USERS] = {}
-
+    database = {}
     try_purge_users = False
 
     await ctx.send('Purged all users from the database.')
 
 ### ### ###
 
-"""
-Called when a user sends a discord message. Check if the message author
-is being tracked. If they are, check if the message contains any words
-that are being tracked. If there is a word, update the number of times
-the user has said that word.
-"""
 async def check_message(ctx):
-    words_msg = ctx.content.split()
+    """
+    Called when a user sends a discord message. Check if the message author
+    is being tracked. If they are, check if the message contains any words
+    that are being tracked. If there is a word, update the number of times
+    the user has said that word.
+    """
     author = str(ctx.author)
-    users = db[DB_USERS]
+    users = database.keys()
+    words_msg = ctx.content.split()
 
     if author not in users:
         return
 
-    words = db[DB_WORDS]
+    words = database[author]
 
-    for word in words_msg:
+    for w in words_msg:
         # Remove whitespace and convert string to lower case
-        word = word.replace(' ', '').lower()
+        word = w.replace(' ', '').lower()
         
         # Construct regex
         word_as_chars = [char for char in word]
@@ -295,30 +317,28 @@ async def check_message(ctx):
 
         for word in words:
             if re.match(regex, word):
-                user = users[author]
+                user = database[author]
 
                 if word in user.keys():
                     user[word] += 1
-                else:
-                    user[word] = 1
 
                 output_msg = '{0} has said {1} {2} times.'.format(ctx.author.mention, word, user[word])
                 await ctx.channel.send(output_msg)
 
 
-"""
-Called when bot has finished starting up.
-"""
 @client.event
 async def on_ready():
+    """
+    Called when bot has finished starting up.
+    """
     print('Bot running')
 
 
-"""
-Called when their is a message is sent in discord
-"""
 @client.event
 async def on_message(ctx):
+    """
+    Called when their is a message is sent in discord
+    """
     # Stop the bot responding to itself
     if ctx.author == client.user:
         return
