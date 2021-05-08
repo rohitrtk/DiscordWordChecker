@@ -6,6 +6,8 @@ import re
 from discord.ext import commands
 from dotenv import load_dotenv
 
+from errors import ErrorMessageGenerator
+
 from ping import keep_running
 
 # Constants
@@ -22,6 +24,9 @@ CMD_GET_USERS = ['getusers', 'gu']
 
 CMD_PURGE_WORDS = ['purgewords', 'pw']
 CMD_PURGE_USERS = ['purgeusers', 'pu']
+
+CMD_GET_USER_WORDS_COUNT = ['getuserwordscount', 'guwc']
+CMD_GET_ALL_USER_WORDS_COUNT = ['alluserwordscountall', 'auwc']
 
 DB_NAME = 'USERS'
 
@@ -46,6 +51,9 @@ database = db[DB_NAME]
 # Purge stuff
 try_purge_words, try_purge_users = False, False
 
+# Error message stuff
+emg = ErrorMessageGenerator('venv/error_messages.txt')
+
 ### Helpers
 
 def print_debug(s):
@@ -69,6 +77,14 @@ async def user_exists_in_server(ctx, username):
     return False
 
 
+async def user_exists_in_db(ctx, username):
+    """
+    Return True if the username exists in the database. Otherwise, return False.
+    """
+    if username not in database.keys():
+        return False
+    return True
+
 ### Word commands
 
 @client.command(name='AddWord', aliases=CMD_ADD_WORD)
@@ -78,10 +94,10 @@ async def add_word(ctx, username, word):
     """
     global database
 
-    if username not in database.keys():
+    if not user_exists_in_db(ctx, username):
         await ctx.send('Unable to add word. {0} is not currently being tracked.'.format(username))
 
-    word = ''.join(word).lower().replace(' ', '')    
+    word = ''.join(word).lower().replace(' ', '')
     
     words = database[username]
 
@@ -108,7 +124,7 @@ async def remove_word(ctx, username, word):
 
     word = word.lower().replace(' ', '')
 
-    if username not in database.keys():
+    if not user_exists_in_db(ctx, username):
         await ctx.send('{0} is not in the database.'.format(username))
         return
 
@@ -128,8 +144,8 @@ async def get_words(ctx, username):
     """
     global database
     
-    if username not in database.keys():
-        await ctx.send('That user does not exist.')
+    if not user_exists_in_db(ctx, username):
+        await ctx.send('User {0} does not exist in the database.'.format(username))
         return
 
     words = list(database[username].keys())
@@ -215,9 +231,7 @@ async def remove_user(ctx, username):
     """
     global database
 
-    users = database.keys()
-
-    if username not in users:
+    if not user_exists_in_db(ctx, username):
         await ctx.send('User {0} does not exist in the database.'.format(username))
         return
 
@@ -269,6 +283,33 @@ async def purge_users(ctx):
     try_purge_users = False
 
     await ctx.send('Purged all users from the database.')
+
+
+@client.command(name='GetUserWordsCount', aliases=CMD_GET_USER_WORDS_COUNT)
+async def get_user_words_count(ctx, username):
+    """
+    Lists the count for all words for a user.
+    """
+    global database
+
+    if not user_exists_in_db(ctx, username):
+        await ctx.send('User {0} does not exist in the database.'.format(username))
+        return
+
+    for word in database[username].keys():
+        await ctx.send('{0} has said {1}, {2} times.'.format(username, word, database[username][word]))
+
+
+@client.command(name='AllUserWordsCount', aliases=CMD_GET_ALL_USER_WORDS_COUNT)
+async def get_all_user_words_count(ctx):
+    """
+    Lists the word count for all users.
+    """
+    global database
+
+    for username in database.keys():
+        for word in database[username].keys():
+            await ctx.send('{0} has said {1}, {2} times.'.format(username, word, database[username][word]))
 
 ### ### ###
 
@@ -335,12 +376,15 @@ async def on_message(ctx):
 
 @client.event
 async def on_command_error(ctx, error):
+    """
+    Called when an error is thrown when using a command.
+    """
     if isinstance(error, commands.errors.CommandNotFound):
         await ctx.send('Unknown command.')
     elif isinstance(error, commands.errors.MissingRequiredArgument):
         await ctx.send('An error occured whilst trying to run your command. Missing required arguments.')
     else:
-        await ctx.send('Wtf happened Rohit?')
+        await ctx.send(emg.get_random_message())
         print(error)
 
 ### MAIN ###
