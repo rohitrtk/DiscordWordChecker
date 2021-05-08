@@ -294,7 +294,7 @@ async def check_message(ctx):
         
         # Construct regex
         word_as_chars = [char for char in word]
-        regex = '.'.join(word_as_chars) + '|' + '*'.join(word_as_chars)
+        regex = '*'.join(word_as_chars)
 
         for word in words:
             if re.match(regex, word):
