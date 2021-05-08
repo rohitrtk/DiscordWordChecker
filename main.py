@@ -12,7 +12,7 @@ from ping import keep_running
 CMD_IDENTIFIER = '$'
 
 CMD_ADD_WORD = ['addword', 'aw']
-CMD_REM_WORD = ['removeword' 'rw']
+CMD_REM_WORD = ['removeword', 'rw']
 
 CMD_ADD_USER = ['adduser', 'au']
 CMD_REM_USER = ['removeuser', 'ru']
@@ -58,7 +58,7 @@ def print_debug(s):
         print('DEBUG: ' + s)
 
 
-async def is_valid_username(ctx, username):
+async def user_exists_in_server(ctx, username):
     """
     Return True if the given username exists in the server. Otherwise, return False.
     """
@@ -72,24 +72,16 @@ async def is_valid_username(ctx, username):
 ### Word commands
 
 @client.command(name='AddWord', aliases=CMD_ADD_WORD)
-async def add_word(ctx, *args):
+async def add_word(ctx, username, word):
     """
     Adds a word to a specific users dictionary.
-
-    Input: args[0] is a persons discord username, args[1] is the word to be tracked.
     """
     global database
 
-    if len(args) != 2:
-        await ctx.send('Invalid command arguments.')
-        return
+    if username not in database.keys():
+        await ctx.send('Unable to add word. {0} is not currently being tracked.'.format(username))
 
-    username = args[0]
-    if not await is_valid_username(ctx, username):
-        await ctx.send('Could not add word. Username is either invalid or does not exist.')
-        return
-
-    word = ''.join(args[1]).lower().replace(' ', '')    
+    word = ''.join(word).lower().replace(' ', '')    
     
     words = database[username]
 
@@ -104,26 +96,17 @@ async def add_word(ctx, *args):
     
     words[word] = 0
 
-    database = words
     await ctx.send('{0} successfuly added to the database.'.format(word))
 
 
 @client.command(name='RemoveWord', aliases=CMD_REM_WORD)
-async def remove_word(ctx, *args):
+async def remove_word(ctx, username, word):
     """
     Removes a word from the database.
-
-    Input: args[0] is a persons discord username, args[1] is the word being tracked.
     """
     global database
 
-    if len(args) != 2:
-        await ctx.send('Invalid command arguments.')
-        return
-
-    username = args[0]
-
-    word = args[1].lower().replace(' ', '')
+    word = word.lower().replace(' ', '')
 
     if username not in database.keys():
         await ctx.send('{0} is not in the database.'.format(username))
@@ -142,13 +125,14 @@ async def get_words(ctx, username):
     """
     Gets a list of all words in the database and sends
     it as a discord message.
-
-    Input: args[0] is the username.
     """
     global database
+    
+    if username not in database.keys():
+        await ctx.send('That user does not exist.')
+        return
 
     words = list(database[username].keys())
-    print(words)
     length = len(words)
 
     if length == 0:
@@ -170,12 +154,16 @@ async def get_words(ctx, username):
     await ctx.send('The words currently in the database are: {0}.'.format(s))
 
 
-"""
-Removes all words from the database.
-"""
 @client.command(name='PurgeWords', aliases=CMD_PURGE_WORDS)
-async def purge_words(ctx):
+async def purge_words(ctx, username):
+    """
+    Removes all words from the database.
+    """
     global try_purge_words
+
+    if username not in database.keys():
+        await ctx.send('User {0} does not exist in the database.'.format(username))
+        return
 
     if not try_purge_words:
         try_purge_words = True
@@ -183,11 +171,11 @@ async def purge_words(ctx):
         
         return
 
-    db[DB_WORDS] = []
+    database[username] = {}
     
     try_purge_words = False
 
-    await ctx.send('Purged all words from the database.')
+    await ctx.send('Purged all words for user: {0}.'.format(username))
 
 ### User commands
 
@@ -222,21 +210,15 @@ async def add_user(ctx, *args):
 
 
 @client.command(name='RemoveUser', aliases=CMD_REM_USER)
-async def remove_user(ctx, *args):
+async def remove_user(ctx, username):
     """
     Removes a user from the database.
     """
     global database
 
-    if len(args) == 0:
-        await ctx.send('Invalid command arguments.')
-        return
-
-    user = args[0]
-
     users = database.keys()
 
-    if user not in users:
+    if username not in database.keys():
         await ctx.send('User {0} does not exist in the database.'.format(user))
         return
 
@@ -348,7 +330,20 @@ async def on_message(ctx):
     else:
         await check_message(ctx)
 
-if not debug:
-    keep_running()
+@client.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.errors.CommandNotFound):
+        await ctx.send('Unknown command.')
+    elif isinstance(error, commands.errors.MissingRequiredArgument):
+        await ctx.send('An error occured whilst trying to run your command. Missing required arguments.')
+    else:
+        await ctx.send('Wtf happened Rohit?')
+        print(error)
 
-client.run(os.getenv('BOT_TOKEN'))
+### MAIN ###
+
+if __name__ == '__main__':
+    if not debug:
+        keep_running()
+
+    client.run(os.getenv('BOT_TOKEN'))
