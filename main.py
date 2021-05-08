@@ -88,52 +88,60 @@ async def user_exists_in_db(ctx, username):
 ### Word commands
 
 @client.command(name='AddWord', aliases=CMD_ADD_WORD)
-async def add_word(ctx, username, word):
+async def add_word(ctx, username, *word_list):
     """
-    Adds a word to a specific users dictionary.
+    Adds words to a users database.
     """
     global database
 
-    if not user_exists_in_db(ctx, username):
-        await ctx.send('Unable to add word. {0} is not currently being tracked.'.format(username))
+    if len(word_list) == 0:
+        raise commands.errors.MissingRequiredArgument
 
-    word = ''.join(word).lower().replace(' ', '')
-    
-    words = database[username]
+    if not await user_exists_in_db(ctx, username):
+        await ctx.send('Unable to add word. {0} is not in the database.'.format(username))
 
-    # Construct regex
-    word_as_chars = [char for char in word]
-    regex = '+'.join(word_as_chars)
-    
-    for w in words.keys():
-        if re.match(regex, w):
-            await ctx.send('{0} is already in the database.'.format(w))
-            return
-    
-    words[word] = 0
+    for word in word_list:
+        word = ''.join(word).lower().replace(' ', '')
+        
+        words = database[username]
 
-    await ctx.send('{0} successfuly added to the database.'.format(word))
+        # Construct regex
+        word_as_chars = [char for char in word]
+        regex = '+'.join(word_as_chars)
+        
+        for w in words.keys():
+            if re.match(regex, w):
+                await ctx.send('{0} is already in the database.'.format(w))
+                continue
+        
+        words[word] = 0
+
+        await ctx.send('{0} successfuly added to the database.'.format(word))
 
 
 @client.command(name='RemoveWord', aliases=CMD_REM_WORD)
-async def remove_word(ctx, username, word):
+async def remove_word(ctx, username, *word_list):
     """
-    Removes a word from the database.
+    Removes words from a users database.
     """
     global database
 
-    word = word.lower().replace(' ', '')
+    if len(word_list) == 0:
+        raise commands.errors.MissingRequiredArgument
 
-    if not user_exists_in_db(ctx, username):
+    if not await user_exists_in_db(ctx, username):
         await ctx.send('{0} is not in the database.'.format(username))
         return
 
-    if word not in database[username].keys():
-        await ctx.send('Not tracking the word {0} for user {1}.'.format(word, username))
-        return
+    for word in word_list:
+        word = word.lower().replace(' ', '')
 
-    del database[username][word]
-    await ctx.send('Removed {0} from {1}\'s database.'.format(word, username))
+        if word not in database[username].keys():
+            await ctx.send('Not tracking the word {0} for user {1}.'.format(word, username))
+            continue
+
+        del database[username][word]
+        await ctx.send('Removed {0} from {1}\'s database.'.format(word, username))
 
 
 @client.command(name='GetWords', aliases=CMD_GET_WORDS)
@@ -144,7 +152,7 @@ async def get_words(ctx, username):
     """
     global database
     
-    if not user_exists_in_db(ctx, username):
+    if not await user_exists_in_db(ctx, username):
         await ctx.send('User {0} does not exist in the database.'.format(username))
         return
 
@@ -177,7 +185,7 @@ async def purge_words(ctx, username):
     """
     global try_purge_words
 
-    if username not in database.keys():
+    if not await user_exists_in_db(ctx, username):
         await ctx.send('User {0} does not exist in the database.'.format(username))
         return
 
@@ -196,47 +204,49 @@ async def purge_words(ctx, username):
 ### User commands
 
 @client.command(name='AddUser', aliases=CMD_ADD_USER)
-async def add_user(ctx, *args):
+async def add_user(ctx, *user_list):
     """
     Adds a user to the database.
     """
     global database
 
-    if len(args) == 0:
-        await ctx.send('Invalid command arguments.')
-        return
-
-    users = database.keys()
-    user = args[0]
+    if len(user_list) == 0:
+        raise commands.errors.MissingRequiredArgument
 
     members = [member.name + '#' + member.discriminator for member in client.get_all_members()]
+    users = database.keys()
 
-    if user not in members:
-        await ctx.send('Could not find member with that username.')
-        return
+    for user in user_list:
+        if user not in members:
+            await ctx.send('Could not find member with that username.')
+            continue
 
-    if user in users:
-        await ctx.send('User {0} is already in the database.'.format(user))
-        return
+        if user in users:
+            await ctx.send('User {0} is already in the database.'.format(user))
+            continue
 
-    database[user] = {}
-    
-    await ctx.send('Now tracking user {0}.'.format(user))
+        database[user] = {}
+        
+        await ctx.send('Now tracking user {0}.'.format(user))
 
 
 @client.command(name='RemoveUser', aliases=CMD_REM_USER)
-async def remove_user(ctx, username):
+async def remove_user(ctx, *user_list):
     """
     Removes a user from the database.
     """
     global database
 
-    if not user_exists_in_db(ctx, username):
-        await ctx.send('User {0} does not exist in the database.'.format(username))
-        return
+    if len(user_list) == 0:
+        raise commands.errors.MissingRequiredArgument
 
-    database.pop(username)
-    await ctx.send('Successully removed user {0} from the database.'.format(username))
+    for user in user_list:
+        if not await user_exists_in_db(ctx, user):
+            await ctx.send('User {0} does not exist in the database.'.format(user))
+            continue
+
+        database.pop(user)
+        await ctx.send('Successully removed user {0} from the database.'.format(user))
 
 
 @client.command(name='GetUsers', aliases=CMD_GET_USERS)
@@ -292,7 +302,7 @@ async def get_user_words_count(ctx, username):
     """
     global database
 
-    if not user_exists_in_db(ctx, username):
+    if not await user_exists_in_db(ctx, username):
         await ctx.send('User {0} does not exist in the database.'.format(username))
         return
 
@@ -331,13 +341,9 @@ async def check_message(ctx):
 
     for word in words_in_database:
         w = word.replace(' ', '').lower()
-        print('WORD IN DB: ' + w)
 
         word_as_char = [char for char in w]
         regex = '+'.join(word_as_char) + '+'
-
-        #print('WORD_AS_CHAR: ' + word_as_char)
-        print('REGEX: ' + regex)
 
         for word_input in words_msg:
             if not re.match(regex, word_input):
@@ -389,8 +395,7 @@ async def on_command_error(ctx, error):
 
 ### MAIN ###
 
-if __name__ == '__main__':
-    if not debug:
-        keep_running()
+if not debug:
+    keep_running()
 
-    client.run(os.getenv('BOT_TOKEN'))
+client.run(os.getenv('BOT_TOKEN'))
