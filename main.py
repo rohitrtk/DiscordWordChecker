@@ -204,7 +204,6 @@ async def add_user(ctx, *args):
         return
 
     database[user] = {}
-    ddatabase = users
     
     await ctx.send('Now tracking user {0}.'.format(user))
 
@@ -218,12 +217,12 @@ async def remove_user(ctx, username):
 
     users = database.keys()
 
-    if username not in database.keys():
-        await ctx.send('User {0} does not exist in the database.'.format(user))
+    if username not in users:
+        await ctx.send('User {0} does not exist in the database.'.format(username))
         return
 
-    database.pop(user)
-    await ctx.send('Successully removed user {0} from the database.'.format(user))
+    database.pop(username)
+    await ctx.send('Successully removed user {0} from the database.'.format(username))
 
 
 @client.command(name='GetUsers', aliases=CMD_GET_USERS)
@@ -304,8 +303,8 @@ async def check_message(ctx):
                 if word in user.keys():
                     user[word] += 1
 
-                output_msg = '{0} has said {1} {2} times.'.format(ctx.author.mention, word, user[word])
-                await ctx.channel.send(output_msg)
+                    output_msg = '{0} has said {1} {2} times.'.format(ctx.author.mention, word, user[word])
+                    await ctx.channel.send(output_msg)
 
 
 @client.event
@@ -329,6 +328,7 @@ async def on_message(ctx):
         await client.process_commands(ctx)
     else:
         await check_message(ctx)
+
 
 @client.event
 async def on_command_error(ctx, error):
