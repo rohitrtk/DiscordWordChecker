@@ -87,7 +87,7 @@ async def add_word(ctx, username, word):
 
     # Construct regex
     word_as_chars = [char for char in word]
-    regex = '.'.join(word_as_chars) + '|' + '*'.join(word_as_chars)
+    regex = '+'.join(word_as_chars)
     
     for w in words.keys():
         if re.match(regex, w):
@@ -286,25 +286,28 @@ async def check_message(ctx):
     if author not in users:
         return
 
-    words = database[author]
+    words_in_database = database[author]
 
-    for w in words_msg:
-        # Remove whitespace and convert string to lower case
-        word = w.replace(' ', '').lower()
+    for word in words_in_database:
+        w = word.replace(' ', '').lower()
+        print('WORD IN DB: ' + w)
+
+        word_as_char = [char for char in w]
+        regex = '+'.join(word_as_char) + '+'
+
+        #print('WORD_AS_CHAR: ' + word_as_char)
+        print('REGEX: ' + regex)
+
+        for word_input in words_msg:
+            if not re.match(regex, word_input):
+                continue
         
-        # Construct regex
-        word_as_chars = [char for char in word]
-        regex = '*'.join(word_as_chars)
+            user = database[author]
 
-        for word in words:
-            if re.match(regex, word):
-                user = database[author]
+            user[word] += 1
 
-                if word in user.keys():
-                    user[word] += 1
-
-                    output_msg = '{0} has said {1} {2} times.'.format(ctx.author.mention, word, user[word])
-                    await ctx.channel.send(output_msg)
+            output_msg = '{0} has said {1} {2} times.'.format(ctx.author.mention, word, user[word])
+            await ctx.channel.send(output_msg)
 
 
 @client.event
