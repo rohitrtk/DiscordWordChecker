@@ -30,9 +30,11 @@ CMD_GET_ALL_USER_WORDS_COUNT = ['alluserwordscountall', 'auwc']
 
 CMD_ENABLE = ['enable', 'en']
 
-CMD_SET_REPLY_CHANNEL_ID = ['setchannelreplyid', 'scri']
+CMD_SET_REPLY_CHANNEL = ['setreplychannel', 'src']
 
 DB_NAME = 'USERS'
+
+ROLE_ADMIN = 'Node'
 
 # Dynamics
 debug = True
@@ -59,7 +61,7 @@ try_purge_users = False
 try_disable_bot = False
 
 # Message stuff
-channel_id = None
+channel = None
 
 # Error message stuff
 emg = ErrorMessageGenerator('venv/error_messages.txt')
@@ -96,15 +98,28 @@ async def user_exists_in_db(ctx, username):
     return True
 
 
-@client.command('SetChannelID', aliases=CMD_SET_REPLY_CHANNEL_ID)
-@commands.has_role('Admin')
-async def set_channel_id(ctx, id=824471574907977738):
+@client.command('SetReplyChannel', aliases=CMD_SET_REPLY_CHANNEL)
+@commands.has_role(ROLE_ADMIN)
+async def set_reply_channel(ctx, id):
     """
     Sets the channel id for the bot to reply in.
     """
-    global channel_id
+    global channel
 
-    channel_id = bot.get_channel(id)
+    channel = client.get_channel(id)
+
+
+async def try_reply(ctx, message):
+    """
+    Tries to send a message to the specified global channel. If that doesn't
+    exist, send message to the reply channel.
+    """
+    global channel
+    
+    if channel != None:
+        await channel.send(message)
+    else:
+        await ctx.send(message)
 
 ### Word commands
 
@@ -119,7 +134,7 @@ async def add_word(ctx, username, *word_list):
         raise commands.errors.MissingRequiredArgument
 
     if not await user_exists_in_db(ctx, username):
-        await channel_id.send('Unable to add word. {0} is not in the database.'.format(username))
+        await try_reply(ctx, 'Unable to add word. {0} is not in the database.'.format(username))
 
     for word in word_list:
         word = ''.join(word).lower().replace(' ', '')
@@ -132,12 +147,12 @@ async def add_word(ctx, username, *word_list):
         
         for w in words.keys():
             if re.match(regex, w):
-                await channel_id.send('{0} is already in the database.'.format(w))
+                await try_reply(ctx, '{0} is already in the database.'.format(w))
                 continue
         
         words[word] = 0
 
-        await channel_id.send('{0} successfuly added to the database.'.format(word))
+        await try_reply(ctx, '{0} successfuly added to the database.'.format(word))
 
 
 @client.command(name='RemoveWord', aliases=CMD_REM_WORD)
@@ -151,18 +166,18 @@ async def remove_word(ctx, username, *word_list):
         raise commands.errors.MissingRequiredArgument
 
     if not await user_exists_in_db(ctx, username):
-        await channel_id.send('{0} is not in the database.'.format(username))
+        await try_reply(ctx, '{0} is not in the database.'.format(username))
         return
 
     for word in word_list:
         word = word.lower().replace(' ', '')
 
         if word not in database[username].keys():
-            await channel_id.send('Not tracking the word {0} for user {1}.'.format(word, username))
+            await try_reply(ctx, 'Not tracking the word {0} for user {1}.'.format(word, username))
             continue
 
         del database[username][word]
-        await channel_id.send('Removed {0} from {1}\'s database.'.format(word, username))
+        await try_reply(ctx, 'Removed {0} from {1}\'s database.'.format(word, username))
 
 
 @client.command(name='GetWords', aliases=CMD_GET_WORDS)
@@ -174,17 +189,17 @@ async def get_words(ctx, username):
     global database, channel_id
     
     if not await user_exists_in_db(ctx, username):
-        await channel_id.send('User {0} does not exist in the database.'.format(username))
+        await try_reply(ctx, 'User {0} does not exist in the database.'.format(username))
         return
 
     words = list(database[username].keys())
     length = len(words)
 
     if length == 0:
-        await channel_id.send('There are currently no words in the database.')
+        await try_reply(ctx, 'There are currently no words in the database.')
         return
     elif length == 1:
-        await channel_id.send('The only word in the database is: {0}'.format(words[0]))
+        await try_reply(ctx, 'The only word in the database is: {0}'.format(words[0]))
         return
 
     s = ''
@@ -196,7 +211,7 @@ async def get_words(ctx, username):
         elif i != length - 1:
             s += ', '
     
-    await channel_id.send('The words currently in the database are: {0}.'.format(s))
+    await try_reply(ctx, 'The words currently in the database are: {0}.'.format(s))
 
 
 @client.command(name='PurgeWords', aliases=CMD_PURGE_WORDS)
@@ -207,12 +222,12 @@ async def purge_words(ctx, username):
     global try_purge_words, channel_id
 
     if not await user_exists_in_db(ctx, username):
-        await channel_id.send('User {0} does not exist in the database.'.format(username))
+        await try_reply(ctx, 'User {0} does not exist in the database.'.format(username))
         return
 
     if not try_purge_words:
         try_purge_words = True
-        await channel_id.send('Do you really want to purge all words from the database? Use the command again if you really want to.')
+        await try_reply(ctx, 'Do you really want to purge all words from the database? Use the command again if you really want to.')
         
         return
 
@@ -220,7 +235,7 @@ async def purge_words(ctx, username):
     
     try_purge_words = False
 
-    await channel_id.send('Purged all words for user: {0}.'.format(username))
+    await try_reply(ctx, 'Purged all words for user: {0}.'.format(username))
 
 ### User commands
 
@@ -239,16 +254,16 @@ async def add_user(ctx, *user_list):
 
     for user in user_list:
         if user not in members:
-            await channel_id.send('Could not find member with that username.')
+            await try_reply(ctx, 'Could not find member with that username.')
             continue
 
         if user in users:
-            await channel_id.send('User {0} is already in the database.'.format(user))
+            await try_reply(ctx, 'User {0} is already in the database.'.format(user))
             continue
 
         database[user] = {}
         
-        await channel_id.send('Now tracking user {0}.'.format(user))
+        await try_reply(ctx, 'Now tracking user {0}.'.format(user))
 
 
 @client.command(name='RemoveUser', aliases=CMD_REM_USER)
@@ -263,11 +278,11 @@ async def remove_user(ctx, *user_list):
 
     for user in user_list:
         if not await user_exists_in_db(ctx, user):
-            await channel_id.send('User {0} does not exist in the database.'.format(user))
+            await try_reply(ctx, 'User {0} does not exist in the database.'.format(user))
             continue
 
         database.pop(user)
-        await channel_id.send('Successully removed user {0} from the database.'.format(user))
+        await try_reply(ctx, 'Successully removed user {0} from the database.'.format(user))
 
 
 @client.command(name='GetUsers', aliases=CMD_GET_USERS)
@@ -281,9 +296,9 @@ async def get_users(ctx):
     length = len(users)
 
     if length == 0:
-        await channel_id.send('There are currently no users in the database.')
+        await try_reply(ctx, 'There are currently no users in the database.')
     elif length == 1:
-        await channel_id.send('The only user in the database is: {0}.'.format(users[0]))
+        await try_reply(ctx, 'The only user in the database is: {0}.'.format(users[0]))
     else:
         s = ''
         for i in range(0, len(users)):
@@ -294,7 +309,7 @@ async def get_users(ctx):
             elif i != length - 1:
                 s += ', '
 
-        await channel_id.send('The users currently in the database are: {0}.'.format(s))
+        await try_reply(ctx, 'The users currently in the database are: {0}.'.format(s))
 
 
 @client.command(name='PurgeUsers', aliases=CMD_PURGE_USERS)
@@ -306,14 +321,14 @@ async def purge_users(ctx):
 
     if not try_purge_users:
         try_purge_users = True
-        await channel_id.send('Do you really want to purge all users from the database? Type the command again if you really want to.')
+        await try_reply(ctx, 'Do you really want to purge all users from the database? Type the command again if you really want to.')
         
         return
 
     database = {}
     try_purge_users = False
 
-    await channel_id.send('Purged all users from the database.')
+    await try_reply(ctx, 'Purged all users from the database.')
 
 
 @client.command(name='GetUserWordsCount', aliases=CMD_GET_USER_WORDS_COUNT)
@@ -324,11 +339,11 @@ async def get_user_words_count(ctx, username):
     global database, channel_id
 
     if not await user_exists_in_db(ctx, username):
-        await channel_id.send('User {0} does not exist in the database.'.format(username))
+        await try_reply(ctx, 'User {0} does not exist in the database.'.format(username))
         return
 
     for word in database[username].keys():
-        await channel_id.send('{0} has said {1}, {2} times.'.format(username, word, database[username][word]))
+        await try_reply(ctx, '{0} has said {1}, {2} times.'.format(username, word, database[username][word]))
 
 
 @client.command(name='AllUserWordsCount', aliases=CMD_GET_ALL_USER_WORDS_COUNT)
@@ -340,30 +355,31 @@ async def get_all_user_words_count(ctx):
 
     for username in database.keys():
         for word in database[username].keys():
-            await channel_id.send('{0} has said {1}, {2} times.'.format(username, word, database[username][word]))
+            await try_reply(ctx, '{0} has said {1}, {2} times.'.format(username, word, database[username][word]))
 
 
 @client.command(name='Enable', aliases=CMD_ENABLE)
-@commands.has_role('Admin')
-async def activate_bot(ctx, option):
+@commands.has_role(ROLE_ADMIN)
+async def activate_bot(ctx):
     """
     Enables/Disables the bot.
     """
-    global channel_id
+    global channel_id, enable
 
-    if option == 'enable':
-        if enable:
-            return
-        enable = True
-        channel_id.send('I am now enabled.')
-    elif option == 'disable':
-        if not enable:
-            return
-        enable = False
-        channel_id.send('I am now disabled.')
+    enable = not enable
+
+    if enable:
+        for cmd in client.commands:
+            if cmd.name == 'Enable':
+                continue
+            cmd.enabled = True
+        await try_reply(ctx, 'I am now enabled.')
     else:
-        channel_id.send('Unknown parameter {0}.'.format(option))
-
+        for cmd in client.commands:
+            if cmd.name == 'Enable':
+                continue
+            cmd.enabled = False
+        await try_reply(ctx, 'I am now disabled.')
 
 ### ### ###
 
@@ -375,7 +391,7 @@ async def check_message(ctx):
     the user has said that word.
     """
     global channel_id
-    
+
     author = str(ctx.author)
     users = database.keys()
     words_msg = ctx.content.split()
@@ -400,7 +416,7 @@ async def check_message(ctx):
             user[word] += 1
 
             output_msg = '{0} has said {1} {2} times.'.format(ctx.author.mention, word, user[word])
-            await ctx.channel_id.send(output_msg)
+            await try_reply(ctx, output_msg)
 
 
 @client.event
@@ -408,6 +424,9 @@ async def on_ready():
     """
     Called when bot has finished starting up.
     """
+    global channel
+    channel = client.get_channel(int(os.getenv('YEET_CHAT')))
+
     print('Bot running')
 
 
@@ -416,14 +435,11 @@ async def on_message(ctx):
     """
     Called when their is a message is sent in discord
     """
-    global channel_id
-
+    global enable
+    
     # Stop the bot responding to itself
-    if ctx.author == client.user or not enable:
+    if ctx.author == client.user:
         return
-
-    if channel_id == None:
-        channel_id = ctx.channel.id
 
     if ctx.content[0] == CMD_IDENTIFIER:
         await client.process_commands(ctx)
@@ -437,12 +453,16 @@ async def on_command_error(ctx, error):
     Called when an error is thrown when using a command.
     """
     if isinstance(error, commands.errors.CommandNotFound):
-        await channel_id.send('Unknown command.')
+        await ctx.send('Unknown command.')
     elif isinstance(error, commands.errors.MissingRequiredArgument):
-        await channel_id.send('An error occured whilst trying to run your command. Missing required arguments.')
+        await ctx.send('An error occured whilst trying to run your command. Missing required arguments.')
+    elif isinstance(error, commands.CheckFailure):
+        await ctx.send('You can\'t use that command.')
+    elif isinstance(error, commands.DisabledCommand):
+        print('Cannot run command. Bot is disabled.')    
     else:
-        await channel_id.send(emg.get_random_message())
-        print(error)
+        await ctx.send(emg.get_random_message())
+    print(error)
 
 ### MAIN ###
 
