@@ -28,10 +28,13 @@ CMD_PURGE_USERS = ['purgeusers', 'pu']
 CMD_GET_USER_WORDS_COUNT = ['getuserwordscount', 'guwc']
 CMD_GET_ALL_USER_WORDS_COUNT = ['alluserwordscountall', 'auwc']
 
+CMD_ENABLE = ['enable', 'en']
+
 DB_NAME = 'USERS'
 
-# If i'm debugging the bot
+# Dynamics
 debug = True
+enable = True
 
 # Load .env
 load_dotenv(os.path.join('venv/', '.env'))
@@ -49,7 +52,9 @@ if DB_NAME not in db.keys():
 database = db[DB_NAME]
 
 # Purge stuff
-try_purge_words, try_purge_users = False, False
+try_purge_words = False
+try_purge_users = False
+try_disable_bot = False
 
 # Error message stuff
 emg = ErrorMessageGenerator('venv/error_messages.txt')
@@ -321,6 +326,27 @@ async def get_all_user_words_count(ctx):
         for word in database[username].keys():
             await ctx.send('{0} has said {1}, {2} times.'.format(username, word, database[username][word]))
 
+
+@client.command(name='Enable', aliases=CMD_ENABLE)
+@commands.has_role('Admin')
+async def activate_bot(ctx, option):
+    """
+    Enables/Disables the bot.
+    """
+    if option == 'enable':
+        if enable:
+            return
+        enable = True
+        ctx.send('I am no enabled.')
+    elif option == 'disable':
+        if not enable:
+            return
+        enable = False
+        ctx.send('I am now disabled.')
+    else:
+        ctx.send('Unknown parameter {0}.'.format(option))
+
+
 ### ### ###
 
 async def check_message(ctx):
@@ -371,7 +397,7 @@ async def on_message(ctx):
     Called when their is a message is sent in discord
     """
     # Stop the bot responding to itself
-    if ctx.author == client.user:
+    if ctx.author == client.user or not enable:
         return
 
     if ctx.content[0] == CMD_IDENTIFIER:
