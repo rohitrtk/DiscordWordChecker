@@ -3,6 +3,9 @@ import replit
 import os
 import re
 
+import threading
+import asyncio
+
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -342,8 +345,12 @@ async def get_user_words_count(ctx, username):
         await try_reply(ctx, 'User {0} does not exist in the database.'.format(username))
         return
 
+    output_msg = ''
+
     for word in database[username].keys():
-        await try_reply(ctx, '{0} has said {1}, {2} times.'.format(username, word, database[username][word]))
+        output_msg += '{0} has said {1}, {2} times.\n'.format(username, word, database[username][word])
+    
+    await try_reply(ctx, output_msg)
 
 
 @client.command(name='AllUserWordsCount', aliases=CMD_GET_ALL_USER_WORDS_COUNT)
@@ -353,9 +360,13 @@ async def get_all_user_words_count(ctx):
     """
     global database, channel_id
 
+    output_msg = ''
+
     for username in database.keys():
         for word in database[username].keys():
-            await try_reply(ctx, '{0} has said {1}, {2} times.'.format(username, word, database[username][word]))
+            output_msg += '{0} has said {1}, {2} times.\n'.format(username, word, database[username][word])
+        
+    await try_reply(ctx, output_msg)
 
 
 @client.command(name='Enable', aliases=CMD_ENABLE)
@@ -401,6 +412,8 @@ async def check_message(ctx):
 
     words_in_database = database[author]
 
+    output_msg = ''
+
     for word in words_in_database:
         w = word.replace(' ', '').lower()
 
@@ -415,8 +428,9 @@ async def check_message(ctx):
 
             user[word] += 1
 
-            output_msg = '{0} has said {1} {2} times.'.format(ctx.author.mention, word, user[word])
-            await try_reply(ctx, output_msg)
+            output_msg += '{0} has said {1} {2} times.\n'.format(ctx.author.mention, word, user[word])
+    
+    await try_reply(ctx, output_msg)
 
 
 @client.event
@@ -433,7 +447,7 @@ async def on_ready():
 @client.event
 async def on_message(ctx):
     """
-    Called when their is a message is sent in discord
+    Called when there is a message is sent in discord
     """
     global enable
     
